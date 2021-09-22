@@ -20,6 +20,13 @@ class RemoteEnv:
     Initializing TCP connection; Initializing Chrome webkit
     '''
     def __init__(self, tcp_ip='localhost', tcp_port=5005, buffer_size=20):
+        tcpconnection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        tcpconnection.bind((tcp_ip, tcp_port))
+        tcpconnection.listen(1)
+        self.conn, self.addr = tcpconnection.accept()
+        self.buffer_size = buffer_size
+        # self.last_length = 10
+
         capabilities = DesiredCapabilities().CHROME
         capabilities["pageLoadStrategy"] = "none"
         options = Options()
@@ -30,13 +37,6 @@ class RemoteEnv:
         options.add_argument("--disable-extensions")
         self.driver = webdriver.Chrome(options=options, executable_path="/usr/bin/chromedriver", desired_capabilities=capabilities)
         self.driver.maximize_window()
-
-        tcpconnection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        tcpconnection.bind((tcp_ip, tcp_port))
-        tcpconnection.listen(1)
-        self.conn, self.addr = tcpconnection.accept()
-        self.buffer_size = buffer_size
-        # self.last_length = 10
 
 
     '''
@@ -57,8 +57,6 @@ class RemoteEnv:
         finally:
             time.sleep(3)
 
-
-    
 
     '''
     Execute commands

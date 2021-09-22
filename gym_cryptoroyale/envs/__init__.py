@@ -1,2 +1,2 @@
-from gym_slitherio.envs.slitherio_env import SlitherioEnv
-#from gym_slitherio.envs.slitherio_extrahard_env import #SlitherioExtraHardEnv
+from gym_cryptoroyale.envs.cryptoroyale_env import CryptoroyaleEnv
+#from gym_cryptoroyale.envs.cryptoroyale_extrahard_env import #CryptoroyaleExtraHardEnv

@@ -11,7 +11,7 @@ STATE_W = 1024
 STATE_H = 768
 #STATE_W = 128 , 256
 #STATE_H = 96 , 192
-class SlitherioEnv(gym.Env):
+class CryptoroyaleEnv(gym.Env):
     """
     Description:
 

@@ -1,5 +1,5 @@
-from slitherio_env import SlitherioEnv
-env = SlitherioEnv()
+from cryptoroyale_env import CryptoroyaleEnv
+env = CryptoroyaleEnv()
 obs = env.reset()
 n_steps = 100
 for _ in range(n_steps):

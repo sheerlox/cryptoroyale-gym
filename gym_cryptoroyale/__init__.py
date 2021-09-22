@@ -1,12 +1,6 @@
 from gym.envs.registration import register
 
 register(
-    id='slitherio-v0',
-    entry_point='gym_slitherio.envs:SlitherioEnv',
+    id='cryptoroyale-v0',
+    entry_point='gym_cryptoroyale.envs:CryptoroyaleEnv',
 )
-'''
-register(
-    id='slitherio-extrahard-v0',
-    entry_point='gym_slitherio.envs:SlitherioExtraHardEnv',
-)
-'''

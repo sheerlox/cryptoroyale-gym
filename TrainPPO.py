@@ -2,7 +2,7 @@ import gym
 from baselines.ppo1 import pposgd_simple, cnn_policy
 
 def train(num_timesteps):
-    env = gym.make('gym_slitherio:slitherio-v0')
+    env = gym.make('gym_cryptoroyale:cryptoroyale-v0')
     def policy_fn(name, ob_space, ac_space):
         return cnn_policy.CnnPolicy(name=name, ob_space=ob_space, ac_space=ac_space)
 
