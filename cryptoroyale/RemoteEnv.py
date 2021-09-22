@@ -9,7 +9,7 @@ from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 import time
 import socket
 import pickle
-from utils import show_mouse, clean_players, clean_loots, calc_distance, calc_angle, calc_size
+from utils import show_mouse, clean_players, clean_loots, build_observation
 '''
 TCP_IP = '127.0.0.1'
 TCP_PORT = 5005
@@ -19,14 +19,17 @@ class RemoteEnv:
     '''
     Initializing TCP connection; Initializing Chrome webkit
     '''
-    def __init__(self, tcp_ip='localhost', tcp_port=5005, buffer_size=20):
+    def __init__(self, tcp_ip='localhost', tcp_port=5005, buffer_size=2048):
         tcpconnection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         tcpconnection.bind((tcp_ip, tcp_port))
         tcpconnection.listen(1)
         self.conn, self.addr = tcpconnection.accept()
         self.buffer_size = buffer_size
         # self.last_length = 10
+        self.player_id = None
 
+
+    def init_driver(self):
         capabilities = DesiredCapabilities().CHROME
         capabilities["pageLoadStrategy"] = "none"
         options = Options()
@@ -42,20 +45,38 @@ class RemoteEnv:
     '''
     Reset enviroment
     '''
-    def env_reset(self):
-        self.driver.get("https://cryptoroyale.one/training/")
-        # self.driver.execute_script("window.stop()")
-        # assert "CryptoRoyale" in self.driver.title
+    def env_reset(self, drop_session=False):
+        if drop_session:
+            if hasattr(self, 'driver'):
+                self.driver.close()
+            self.init_driver()
+            time.sleep(10)
+
+            self.driver.get("https://cryptoroyale.one/training/")
+
         try:
-            button_play = WebDriverWait(self.driver, 15).until(EC.presence_of_element_located((By.XPATH, "//button[contains(text(), ' Play ')]")))
+            try:
+                # If we get a "Maximum number of connections exceeded" error, hard reset
+                WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Maximum number of connections')]")))
+                self.env_reset(True)
+            except:
+                button_play = WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.XPATH, "//button[contains(text(), 'Play')]")))
 
-            show_mouse(self.driver)
-
-            action = webdriver.common.action_chains.ActionChains(self.driver)
-            action.move_to_element_with_offset(button_play, 15, 15)
-            action.pause(2).click().perform()
+                show_mouse(self.driver)
+                action = webdriver.common.action_chains.ActionChains(self.driver)
+                action.move_to_element_with_offset(button_play, 15, 15)
+                action.pause(1)
+                action.click()
+                action.move_to_element_with_offset(button_play, -50, 15) # move mouse out of the button so we don't accidentally click on it when boosting
+                action.pause(1)
+                action.perform()
+        except:
+            # handles things like stuck on "Trying to connect to game server" etc ...
+            self.env_reset(True)
         finally:
-            time.sleep(3)
+            time.sleep(2)
+            user_state = self.driver.execute_script("return user_state")
+            self.player_id = user_state['cloud']['pid']
 
 
     '''
@@ -64,22 +85,61 @@ class RemoteEnv:
     def env_cmd(self):
         data = self.conn.recv(self.buffer_size)
         if data:
-            print("received data:", data.decode('utf-8'))
+            step = data.decode('utf-8')
+            print("executing:", step)
             if data.decode('utf-8') == "state":
                 try:
-                    data=pickle.dumps([False,int(self.driver.execute_script("return Math.floor(15 * (fpsls[snake.sct] + snake.fam / fmlts[snake.sct] - 1) - 5) / 1"))])
-                except:
-                    data=pickle.dumps([True,0])
-                self.conn.send(data)
-            elif data.decode('utf-8') == "reset":
+                    game_state = self.driver.execute_script("return game_state")
+
+                    if game_state['cycle']['stage'] == 'pre-game':
+                        data=pickle.dumps([False, None, None])
+
+                    else:
+                        players_df = clean_players(game_state['players'])
+                        our_player = players_df.loc[players_df['id'] == str(self.player_id)].iloc[0]
+                        players_df = players_df.drop(players_df.loc[players_df['id'] == str(self.player_id)].index)
+
+                        infos = {
+                            'time': game_state['cycle']['timer'],
+                            'health': our_player['HP'],
+                            'place': our_player['place'],
+                        }
+
+                        if game_state['cycle']['stage'] == 'post-game':
+                            print('------------END EPISODE DUE TO POST GAME')
+                            data=pickle.dumps([True, None, { 'place': our_player['place'] }])
+
+                        elif our_player['HP'] == 0:
+                            print('------------END EPISODE DUE TO HEALTH 0')
+                            print(our_player)
+                            data=pickle.dumps([True, None, infos])
+                        else:
+                            observation = build_observation(our_player, players_df, clean_loots(game_state['loot']), game_state['gas_area'])
+                            data=pickle.dumps([False, observation, infos])
+
+                except Exception as e:
+                    data=pickle.dumps([True, None, None])
+                    print('An error occured while calculating state:')
+                    print(e.with_traceback())
+
+                finally:
+                    self.conn.send(data)
+
+            elif data.decode('utf-8') == "action":
+                self.conn.send("awaiting_action".encode('utf-8'))
+                action = pickle.loads(self.conn.recv(self.buffer_size))
+                self.driver.execute_script("user_state.local.mousecoords = { 'x': %f, 'y': %f }" % (action['mousepos_x'] * 0.73, action['mousepos_y'] * 0.73))
+
+                if (action['boost'] == 1):
+                    action = webdriver.common.action_chains.ActionChains(self.driver)
+                    action.click().perform()
+
+                self.conn.send("executed_action".encode('utf-8'))
+
+            elif data.decode('utf-8') == "soft_reset":
                 self.env_reset()
                 self.conn.send("ok".encode('utf-8'))
-            elif data.decode('utf-8') == "isalive":
-                if self.driver.execute_script("document.getElementById('login').style.display")=="block":
-                    self.conn.send("no".encode('utf-8'))
-                else:
-                    self.conn.send("yes".encode('utf-8'))
-            
 
-
-
+            elif data.decode('utf-8') == "hard_reset":
+                self.env_reset(True)
+                self.conn.send("ok".encode('utf-8'))

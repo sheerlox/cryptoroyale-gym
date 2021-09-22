@@ -60,8 +60,7 @@ def clean_players(players):
     return buffer
 
 def clean_loots(loots):
-    names = ['id', 'class', 'abouttodie', 'pos_x', 'pos_y']
-    # formats = ['U4', 'U1', 'u1', 'f8', 'f8']
+    names = ['id', 'class', 'pos_x', 'pos_y', 'abouttodie']
 
     buffer = pd.DataFrame(columns=names)
 
@@ -69,9 +68,9 @@ def clean_loots(loots):
         new_loot = {
             'id': id,
             'class': loot['t'],
-            'abouttodie': loot['abouttodie'],
             'pos_x': None,
             'pos_y': None,
+            'abouttodie': loot['abouttodie'],
         }
 
         if 'pos' in loot and not pd.isnull(loot['pos']):
@@ -82,11 +81,49 @@ def clean_loots(loots):
     
     return buffer
 
-def calc_distance(e1, e2):
-    return math.sqrt(math.pow(e1['pos_x'] - e2['pos_x'], 2) + math.pow(e1['pos_y'] - e2['pos_y'], 2))
+def clean_gas_area(gas_area):
+    return {
+        'pos_x': gas_area['x'],
+        'pos_y': gas_area['y'],
+        'pos_r': gas_area['r'],
+        'next_x': gas_area['next']['x'],
+        'next_y': gas_area['next']['y'],
+        'next_r': gas_area['next']['r'],
+    }
 
-def calc_angle(e1, e2):
-    return math.atan(e2['pos_y'] - e1['pos_y'] / e2['pos_x'] - e1['pos_x'])
+def transform_class(c): # 'R', 'S', 'L'
+    if c == 'L':
+        return 0
+    if c == 'P':
+        return 1
+    if c == 'R':
+        return 2
+    if c == 'S':
+        return 3
 
-def calc_size(e):
-    return math.log2(max(20, e['HP'])) * 7.5
+def build_observation(our_player, players_df, loots_df, gas_area):
+    our_player = our_player[['class', 'HP', 'pos_x', 'pos_y', 'to_x', 'to_y', 'inertia_x', 'inertia_y']]
+    players_df = players_df[['class', 'HP', 'pos_x', 'pos_y', 'to_x', 'to_y', 'inertia_x', 'inertia_y']]
+
+    players_df['class'] = players_df['class'].apply(lambda x: transform_class(x))
+    our_player['class'] = transform_class(our_player['class'])
+
+    loots_df = loots_df[['class', 'pos_x', 'pos_y', 'abouttodie']]
+
+    loots_df['class'] = loots_df['class'].apply(lambda x: transform_class(x))
+
+    return {
+        'player': tuple(our_player.to_numpy()),
+        'enemies': players_df.to_records(index=False),
+        'loots': loots_df.to_records(index=False),
+        'zone': tuple(clean_gas_area(gas_area).values())
+    }
+
+# def calc_distance(e1, e2):
+#     return math.sqrt(math.pow(e1['pos_x'] - e2['pos_x'], 2) + math.pow(e1['pos_y'] - e2['pos_y'], 2))
+
+# def calc_angle(e1, e2):
+#     return math.atan(e2['pos_y'] - e1['pos_y'] / e2['pos_x'] - e1['pos_x'])
+
+# def calc_size(e):
+#     return math.log2(max(20, e['HP'])) * 7.5
