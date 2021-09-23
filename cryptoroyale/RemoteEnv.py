@@ -27,6 +27,7 @@ class RemoteEnv:
         self.buffer_size = buffer_size
         # self.last_length = 10
         self.player_id = None
+        self.first_reset = True
 
 
     def init_driver(self):
@@ -46,38 +47,41 @@ class RemoteEnv:
     Reset enviroment
     '''
     def env_reset(self, drop_session=False):
-        if drop_session or not hasattr(self, 'driver'):
-            print('dropping session')
+        if drop_session:
             if hasattr(self, 'driver'):
+                print('dropping session')
                 self.driver.close()
             self.init_driver()
             time.sleep(10)
 
             self.driver.get("https://cryptoroyale.one/training/")
 
-        try:
+        if self.first_reset:
+            self.first_reset = False
+        else:
             try:
-                # If we get a "Maximum number of connections exceeded" error, hard reset
-                WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Maximum number of connections')]")))
-                self.env_reset(True)
-            except:
-                button_play = WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.XPATH, "//button[contains(text(), 'Play')]")))
+                try:
+                    # If we get a "Maximum number of connections exceeded" error, hard reset
+                    WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Maximum number of connections')]")))
+                    self.env_reset(True)
+                except:
+                    button_play = WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.XPATH, "//button[contains(text(), 'Play')]")))
 
-                show_mouse(self.driver)
-                action = webdriver.common.action_chains.ActionChains(self.driver)
-                action.move_to_element_with_offset(button_play, 15, 15)
-                action.pause(1)
-                action.click()
-                action.move_to_element_with_offset(button_play, -50, 15) # move mouse out of the button so we don't accidentally click on it when boosting
-                action.pause(1)
-                action.perform()
-        except:
-            # handles things like stuck on "Trying to connect to game server" etc ...
-            self.env_reset(True)
-        finally:
-            time.sleep(2)
-            user_state = self.driver.execute_script("return user_state")
-            self.player_id = user_state['cloud']['pid']
+                    show_mouse(self.driver)
+                    action = webdriver.common.action_chains.ActionChains(self.driver)
+                    action.move_to_element_with_offset(button_play, 15, 15)
+                    action.pause(1)
+                    action.click()
+                    action.move_to_element_with_offset(button_play, -50, 15) # move mouse out of the button so we don't accidentally click on it when boosting
+                    action.pause(1)
+                    action.perform()
+            except:
+                # handles things like stuck on "Trying to connect to game server" etc ...
+                self.env_reset(True)
+            finally:
+                time.sleep(2)
+                user_state = self.driver.execute_script("return user_state")
+                self.player_id = user_state['cloud']['pid']
 
 
     '''
@@ -103,16 +107,10 @@ class RemoteEnv:
                     }
 
                     observation = build_observation(our_player, players_df, clean_loots(game_state['loot']), game_state['gas_area'])
-                    print('OBSERVATION')
-                    print(observation)
 
                     if game_state['cycle']['stage'] == 'post-game':
-                        print('------------END EPISODE DUE TO POST GAME')
                         data=pickle.dumps([True, observation, { 'place': our_player['place'] }])
-
                     elif our_player['HP'] == 0:
-                        print('------------END EPISODE DUE TO HEALTH 0')
-                        print(our_player)
                         data=pickle.dumps([True, observation, infos])
                     else:
                         data=pickle.dumps([False, observation, infos])
@@ -123,15 +121,11 @@ class RemoteEnv:
                     print(e.with_traceback())
 
                 finally:
-                    _, obs, _ = pickle.loads(data)
-                    print('LOADED OBSERVATION')
-                    print(obs)
                     self.conn.send(data)
 
             elif data.decode('utf-8') == "action":
                 self.conn.send("awaiting_action".encode('utf-8'))
                 action = pickle.loads(self.conn.recv(self.buffer_size))
-                print(action)
                 self.driver.execute_script("user_state.local.mousecoords = { 'x': %f, 'y': %f }" % (action[0] * 0.73, action[1] * 0.73))
 
                 if (action[2] >= 0.5):
@@ -143,13 +137,11 @@ class RemoteEnv:
             elif data.decode('utf-8') == "soft_reset":
                 self.env_reset()
                 while self.driver.execute_script("return game_state")['cycle']['stage'] == 'pre-game':
-                    print('waiting for game to begin')
                     time.sleep(0.1)
                 self.conn.send("ok".encode('utf-8'))
 
             elif data.decode('utf-8') == "hard_reset":
                 self.env_reset(True)
                 while self.driver.execute_script("return game_state")['cycle']['stage'] == 'pre-game':
-                    print('waiting for game to begin')
                     time.sleep(0.1)
                 self.conn.send("ok".encode('utf-8'))

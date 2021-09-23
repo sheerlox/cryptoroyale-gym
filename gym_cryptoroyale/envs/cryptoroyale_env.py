@@ -5,6 +5,11 @@ import gym
 from gym import error, spaces, utils
 from gym.utils import seeding
 import pickle
+
+def reshape_inputs_with_zeros(input, expected_shape):
+    missing_rows = np.zeros((expected_shape[0] - input.shape[0], expected_shape[1]))
+    return np.concatenate((input, missing_rows), axis=0)
+
 class CryptoroyaleEnv(gym.Env):
     """
     Description:
@@ -56,14 +61,14 @@ class CryptoroyaleEnv(gym.Env):
                 shape=(8,)
             ),
             'enemies': spaces.Box(
-                low=np.array([0, 0, 0, 0, 0, 0, -200, -200]),
-                high=np.array([3, 2500, 1120, 820, 1120, 820, 200, 200]),
-                shape=(8,)
+                low=np.array([[0, 0, 0, 0, 0, 0, -200, -200], [0, 0, 0, 0, 0, 0, -200, -200], [0, 0, 0, 0, 0, 0, -200, -200], [0, 0, 0, 0, 0, 0, -200, -200], [0, 0, 0, 0, 0, 0, -200, -200], [0, 0, 0, 0, 0, 0, -200, -200], [0, 0, 0, 0, 0, 0, -200, -200], [0, 0, 0, 0, 0, 0, -200, -200], [0, 0, 0, 0, 0, 0, -200, -200], [0, 0, 0, 0, 0, 0, -200, -200]]),
+                high=np.array([[3, 2500, 1120, 820, 1120, 820, 200, 200], [3, 2500, 1120, 820, 1120, 820, 200, 200], [3, 2500, 1120, 820, 1120, 820, 200, 200], [3, 2500, 1120, 820, 1120, 820, 200, 200], [3, 2500, 1120, 820, 1120, 820, 200, 200], [3, 2500, 1120, 820, 1120, 820, 200, 200], [3, 2500, 1120, 820, 1120, 820, 200, 200], [3, 2500, 1120, 820, 1120, 820, 200, 200], [3, 2500, 1120, 820, 1120, 820, 200, 200], [3, 2500, 1120, 820, 1120, 820, 200, 200]]),
+                shape=(10,8)
             ),
             'loots': spaces.Box(
-                low=np.array([0, 0, 0, 0]),
-                high=np.array([3, 1120, 820, 1]),
-                shape=(4,)
+                low=np.array([[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]),
+                high=np.array([[3, 1120, 820, 1], [3, 1120, 820, 1], [3, 1120, 820, 1], [3, 1120, 820, 1], [3, 1120, 820, 1], [3, 1120, 820, 1], [3, 1120, 820, 1], [3, 1120, 820, 1], [3, 1120, 820, 1], [3, 1120, 820, 1], [3, 1120, 820, 1], [3, 1120, 820, 1]]),
+                shape=(12,4)
             ),
             'zone': spaces.Box(
                 low=np.array([0, 0, 0, 0, 0, 0]),
@@ -82,17 +87,21 @@ class CryptoroyaleEnv(gym.Env):
 
     def step(self, action):
         print('step')
-        print(action)
         done = True
 
         self.tcpconnection.send("action".encode('utf-8'))
         if self.tcpconnection.recv(2048).decode('utf-8') == "awaiting_action":
-            print('awaiting_action')
             self.tcpconnection.send(pickle.dumps(action))
         if self.tcpconnection.recv(2048).decode('utf-8') == "executed_action":
-            print('executed_action')
             self.tcpconnection.send("state".encode('utf-8'))
             done, observation, infos = pickle.loads(self.tcpconnection.recv(2048))
+
+        clean_observation = {
+            'player': np.array(observation[0]),
+            'enemies': reshape_inputs_with_zeros(np.array(observation[1]), self.observation_space['enemies'].shape),
+            'loots': reshape_inputs_with_zeros(np.array(observation[2]), self.observation_space['loots'].shape),
+            'zone': np.array(observation[3]),
+        }
 
         if infos:
             if not done:
@@ -105,13 +114,13 @@ class CryptoroyaleEnv(gym.Env):
 
         self.total_reward = self.total_reward + reward
 
-        print("****State of current episode 1: ", done)
+        print("****State of current episode: ", done)
         if infos:
             print("****New Health: ", infos['health'])
         print("****Last Health: ", self.last_health)
         print("****Collected Reward: ", reward)
         print('****Total Reward: ', self.total_reward)
-        return observation, reward, done, {} 
+        return clean_observation, reward, done, {} 
 
 
     def reset(self, hard_reset=False):
@@ -128,11 +137,16 @@ class CryptoroyaleEnv(gym.Env):
             self.tcpconnection.send("state".encode('utf-8'))
             done, observation, _ = pickle.loads(self.tcpconnection.recv(4096))
 
-            print("****State of current episode 2: ", done)
-            print("****Observation: ")
-            print(observation)
+            clean_observation = {
+                'player': np.array(observation[0]),
+                'enemies': reshape_inputs_with_zeros(np.array(observation[1]), self.observation_space['enemies'].shape),
+                'loots': reshape_inputs_with_zeros(np.array(observation[2]), self.observation_space['loots'].shape),
+                'zone': np.array(observation[3]),
+            }
 
-            return observation
+            print("****State of current episode: ", done)
+
+            return clean_observation
 
 
     def render(self, mode='human'):
