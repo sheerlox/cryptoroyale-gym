@@ -35,23 +35,23 @@ def clean_players(players):
             'class': player['class'],
             'mode_int': player['mode_int'],
             'place': player['place'],
-            'pos_x': None,
-            'pos_y': None,
-            'to_x': None,
-            'to_y': None,
-            'inertia_x': None,
-            'inertia_y': None,
+            'pos_x': 0,
+            'pos_y': 0,
+            'to_x': 0,
+            'to_y': 0,
+            'inertia_x': 0,
+            'inertia_y': 0,
         }
 
         if 'pos' in player and not pd.isnull(player['pos']):
             new_player['pos_x'] = player['pos']['x']
             new_player['pos_y'] = player['pos']['y']
 
-        if 'pos' in player and not pd.isnull(player['to']):
+        if 'to' in player and not pd.isnull(player['to']):
             new_player['to_x'] = player['to']['x']
             new_player['to_y'] = player['to']['y']
 
-        if 'pos' in player and not pd.isnull(player['inertia']):
+        if 'inertia' in player and not pd.isnull(player['inertia']):
             new_player['inertia_x'] = player['inertia']['x']
             new_player['inertia_y'] = player['inertia']['y']
         
@@ -68,8 +68,8 @@ def clean_loots(loots):
         new_loot = {
             'id': id,
             'class': loot['t'],
-            'pos_x': None,
-            'pos_y': None,
+            'pos_x': 0,
+            'pos_y': 0,
             'abouttodie': loot['abouttodie'],
         }
 
@@ -112,12 +112,12 @@ def build_observation(our_player, players_df, loots_df, gas_area):
 
     loots_df['class'] = loots_df['class'].apply(lambda x: transform_class(x))
 
-    return {
-        'player': tuple(our_player.to_numpy()),
-        'enemies': players_df.to_records(index=False),
-        'loots': loots_df.to_records(index=False),
-        'zone': tuple(clean_gas_area(gas_area).values())
-    }
+    return [
+        our_player.to_list(),
+        players_df.to_records(index=False).tolist(),
+        loots_df.to_records(index=False).tolist(),
+        list(clean_gas_area(gas_area).values())
+    ]
 
 # def calc_distance(e1, e2):
 #     return math.sqrt(math.pow(e1['pos_x'] - e2['pos_x'], 2) + math.pow(e1['pos_y'] - e2['pos_y'], 2))

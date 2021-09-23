@@ -36,11 +36,19 @@ class CryptoroyaleEnv(gym.Env):
         self.tcpconnection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.tcpconnection.connect(('localhost', 5005))
 
-        self.action_space = spaces.Dict({
-            'mousepos_x': spaces.Box(low=0, high=1120, shape=(), dtype=np.uint16),
-            'mousepos_y': spaces.Box(low=0, high=820, shape=(), dtype=np.uint16),
-            'boost': spaces.MultiBinary(1)
-        })
+        # self.action_space = spaces.Dict({
+        #     'mousepos_x': spaces.Box(low=0, high=1120, shape=(), dtype=np.uint16),
+        #     'mousepos_y': spaces.Box(low=0, high=820, shape=(), dtype=np.uint16),
+        #     'boost': spaces.MultiBinary(1)
+        # })
+
+        self.action_space = spaces.Box(
+            low=np.array([0, 0, 0]),
+            high=np.array([1120, 820, 1]),
+            shape=(3,),
+            dtype=np.uint16
+        )
+
         self.observation_space = spaces.Dict({
             'player': spaces.Box(
                 low=np.array([0, 0, 0, 0, 0, 0, -200, -200]),
@@ -74,12 +82,15 @@ class CryptoroyaleEnv(gym.Env):
 
     def step(self, action):
         print('step')
+        print(action)
         done = True
 
         self.tcpconnection.send("action".encode('utf-8'))
         if self.tcpconnection.recv(2048).decode('utf-8') == "awaiting_action":
+            print('awaiting_action')
             self.tcpconnection.send(pickle.dumps(action))
         if self.tcpconnection.recv(2048).decode('utf-8') == "executed_action":
+            print('executed_action')
             self.tcpconnection.send("state".encode('utf-8'))
             done, observation, infos = pickle.loads(self.tcpconnection.recv(2048))
 
@@ -94,7 +105,7 @@ class CryptoroyaleEnv(gym.Env):
 
         self.total_reward = self.total_reward + reward
 
-        print("****State of current episode: ", done)
+        print("****State of current episode 1: ", done)
         if infos:
             print("****New Health: ", infos['health'])
         print("****Last Health: ", self.last_health)
@@ -115,9 +126,11 @@ class CryptoroyaleEnv(gym.Env):
             self.last_health = 100
             self.total_reward = 0
             self.tcpconnection.send("state".encode('utf-8'))
-            done, observation, _ = pickle.loads(self.tcpconnection.recv(2048))
+            done, observation, _ = pickle.loads(self.tcpconnection.recv(4096))
 
-            print("****State of current episode: ", done)
+            print("****State of current episode 2: ", done)
+            print("****Observation: ")
+            print(observation)
 
             return observation
 

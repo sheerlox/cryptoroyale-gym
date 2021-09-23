@@ -46,7 +46,8 @@ class RemoteEnv:
     Reset enviroment
     '''
     def env_reset(self, drop_session=False):
-        if drop_session:
+        if drop_session or not hasattr(self, 'driver'):
+            print('dropping session')
             if hasattr(self, 'driver'):
                 self.driver.close()
             self.init_driver()
@@ -91,31 +92,30 @@ class RemoteEnv:
                 try:
                     game_state = self.driver.execute_script("return game_state")
 
-                    if game_state['cycle']['stage'] == 'pre-game':
-                        data=pickle.dumps([False, None, None])
+                    players_df = clean_players(game_state['players'])
+                    our_player = players_df.loc[players_df['id'] == str(self.player_id)].iloc[0]
+                    players_df = players_df.drop(players_df.loc[players_df['id'] == str(self.player_id)].index)
 
+                    infos = {
+                        'time': game_state['cycle']['timer'],
+                        'health': our_player['HP'],
+                        'place': our_player['place'],
+                    }
+
+                    observation = build_observation(our_player, players_df, clean_loots(game_state['loot']), game_state['gas_area'])
+                    print('OBSERVATION')
+                    print(observation)
+
+                    if game_state['cycle']['stage'] == 'post-game':
+                        print('------------END EPISODE DUE TO POST GAME')
+                        data=pickle.dumps([True, observation, { 'place': our_player['place'] }])
+
+                    elif our_player['HP'] == 0:
+                        print('------------END EPISODE DUE TO HEALTH 0')
+                        print(our_player)
+                        data=pickle.dumps([True, observation, infos])
                     else:
-                        players_df = clean_players(game_state['players'])
-                        our_player = players_df.loc[players_df['id'] == str(self.player_id)].iloc[0]
-                        players_df = players_df.drop(players_df.loc[players_df['id'] == str(self.player_id)].index)
-
-                        infos = {
-                            'time': game_state['cycle']['timer'],
-                            'health': our_player['HP'],
-                            'place': our_player['place'],
-                        }
-
-                        if game_state['cycle']['stage'] == 'post-game':
-                            print('------------END EPISODE DUE TO POST GAME')
-                            data=pickle.dumps([True, None, { 'place': our_player['place'] }])
-
-                        elif our_player['HP'] == 0:
-                            print('------------END EPISODE DUE TO HEALTH 0')
-                            print(our_player)
-                            data=pickle.dumps([True, None, infos])
-                        else:
-                            observation = build_observation(our_player, players_df, clean_loots(game_state['loot']), game_state['gas_area'])
-                            data=pickle.dumps([False, observation, infos])
+                        data=pickle.dumps([False, observation, infos])
 
                 except Exception as e:
                     data=pickle.dumps([True, None, None])
@@ -123,14 +123,18 @@ class RemoteEnv:
                     print(e.with_traceback())
 
                 finally:
+                    _, obs, _ = pickle.loads(data)
+                    print('LOADED OBSERVATION')
+                    print(obs)
                     self.conn.send(data)
 
             elif data.decode('utf-8') == "action":
                 self.conn.send("awaiting_action".encode('utf-8'))
                 action = pickle.loads(self.conn.recv(self.buffer_size))
-                self.driver.execute_script("user_state.local.mousecoords = { 'x': %f, 'y': %f }" % (action['mousepos_x'] * 0.73, action['mousepos_y'] * 0.73))
+                print(action)
+                self.driver.execute_script("user_state.local.mousecoords = { 'x': %f, 'y': %f }" % (action[0] * 0.73, action[1] * 0.73))
 
-                if (action['boost'] == 1):
+                if (action[2] >= 0.5):
                     action = webdriver.common.action_chains.ActionChains(self.driver)
                     action.click().perform()
 
@@ -138,8 +142,14 @@ class RemoteEnv:
 
             elif data.decode('utf-8') == "soft_reset":
                 self.env_reset()
+                while self.driver.execute_script("return game_state")['cycle']['stage'] == 'pre-game':
+                    print('waiting for game to begin')
+                    time.sleep(0.1)
                 self.conn.send("ok".encode('utf-8'))
 
             elif data.decode('utf-8') == "hard_reset":
                 self.env_reset(True)
+                while self.driver.execute_script("return game_state")['cycle']['stage'] == 'pre-game':
+                    print('waiting for game to begin')
+                    time.sleep(0.1)
                 self.conn.send("ok".encode('utf-8'))
