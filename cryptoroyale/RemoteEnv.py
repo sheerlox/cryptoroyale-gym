@@ -28,6 +28,7 @@ class RemoteEnv:
         # self.last_length = 10
         self.player_id = None
         self.first_reset = True
+        self.last_know_time = None
 
 
     def init_driver(self):
@@ -47,12 +48,16 @@ class RemoteEnv:
     Reset enviroment
     '''
     def env_reset(self, drop_session=False):
+        self.player_id = None
+        self.last_know_time = None
+
         if drop_session:
+            print('hard reset')
             if hasattr(self, 'driver'):
                 print('dropping session')
                 self.driver.close()
             self.init_driver()
-            time.sleep(10)
+            time.sleep(15)
 
             self.driver.get("https://cryptoroyale.one/training/")
 
@@ -62,7 +67,7 @@ class RemoteEnv:
             try:
                 try:
                     # If we get a "Maximum number of connections exceeded" error, hard reset
-                    WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Maximum number of connections')]")))
+                    WebDriverWait(self.driver, 2).until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Maximum number of connections')]")))
                     self.env_reset(True)
                 except:
                     button_play = WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.XPATH, "//button[contains(text(), 'Play')]")))
@@ -106,10 +111,14 @@ class RemoteEnv:
                         'place': our_player['place'],
                     }
 
+                    # persist game time because it isn't available once we get to post-game
+                    if not game_state['cycle']['stage'] == 'post-game':
+                        self.last_know_time = game_state['cycle']['timer']
+
                     observation = build_observation(our_player, players_df, clean_loots(game_state['loot']), game_state['gas_area'])
 
                     if game_state['cycle']['stage'] == 'post-game':
-                        data=pickle.dumps([True, observation, { 'place': our_player['place'] }])
+                        data=pickle.dumps([True, observation, { 'time': self.last_know_time, 'place': our_player['place'] }])
                     elif our_player['HP'] == 0:
                         data=pickle.dumps([True, observation, infos])
                     else:
@@ -126,7 +135,7 @@ class RemoteEnv:
             elif data.decode('utf-8') == "action":
                 self.conn.send("awaiting_action".encode('utf-8'))
                 action = pickle.loads(self.conn.recv(self.buffer_size))
-                self.driver.execute_script("user_state.local.mousecoords = { 'x': %f, 'y': %f }" % (action[0] * 0.73, action[1] * 0.73))
+                self.driver.execute_script("user_state.local.mousecoords = { 'x': %f, 'y': %f }" % (action[0] * 1120 * 0.73, action[1] * 820 * 0.73))
 
                 if (action[2] >= 0.5):
                     action = webdriver.common.action_chains.ActionChains(self.driver)

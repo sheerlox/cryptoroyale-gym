@@ -21,8 +21,8 @@ class CryptoroyaleEnv(gym.Env):
     Actions:
         Type: Box(3,)
         Num     Actions
-        0       Mouse position x
-        1       Mouse position y
+        0       Mouse position x / 1120
+        1       Mouse position y / 820
         3       Boost
 
     Reward:
@@ -49,9 +49,9 @@ class CryptoroyaleEnv(gym.Env):
 
         self.action_space = spaces.Box(
             low=np.array([0, 0, 0]),
-            high=np.array([1120, 820, 1]),
+            high=np.array([1, 1, 1]),
             shape=(3,),
-            dtype=np.uint16
+            dtype=np.float32
         )
 
         self.observation_space = spaces.Dict({
@@ -86,7 +86,6 @@ class CryptoroyaleEnv(gym.Env):
 
 
     def step(self, action):
-        print('step')
         done = True
 
         self.tcpconnection.send("action".encode('utf-8'))
@@ -114,12 +113,14 @@ class CryptoroyaleEnv(gym.Env):
 
         self.total_reward = self.total_reward + reward
 
+        print("*******************************************")
         print("****State of current episode: ", done)
         if infos:
             print("****New Health: ", infos['health'])
         print("****Last Health: ", self.last_health)
         print("****Collected Reward: ", reward)
         print('****Total Reward: ', self.total_reward)
+        time.sleep(0.2)
         return clean_observation, reward, done, {} 
 
 
