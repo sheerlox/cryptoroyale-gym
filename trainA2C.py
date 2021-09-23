@@ -28,4 +28,4 @@ obs = env.reset()
 while True:
     action, _states = model.predict(obs)
     obs, rewards, dones, info = env.step(action)
-    sleep(0.2)
+    sleep(0.1)

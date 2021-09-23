@@ -120,7 +120,7 @@ class CryptoroyaleEnv(gym.Env):
         print("****Last Health: ", self.last_health)
         print("****Collected Reward: ", reward)
         print('****Total Reward: ', self.total_reward)
-        time.sleep(0.2)
+        time.sleep(0.1)
         return clean_observation, reward, done, {} 
 
 
