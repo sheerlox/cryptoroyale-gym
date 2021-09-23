@@ -7,8 +7,11 @@ from gym.utils import seeding
 import pickle
 
 def reshape_inputs_with_zeros(input, expected_shape):
-    missing_rows = np.zeros((expected_shape[0] - input.shape[0], expected_shape[1]))
-    return np.concatenate((input, missing_rows), axis=0)
+    if not input.shape[-1] == 0:
+        missing_rows = np.zeros((expected_shape[0] - input.shape[0], expected_shape[1]))
+        return np.concatenate((input, missing_rows), axis=0)
+    else:
+        return np.zeros(expected_shape)
 
 class CryptoroyaleEnv(gym.Env):
     """
