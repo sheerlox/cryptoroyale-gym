@@ -23,7 +23,7 @@ eval_callback = EvalCallback(eval_env, best_model_save_path="./output/models/",
 
 # The noise objects for DDPG
 n_actions = eval_env.action_space.shape[-1]
-action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
+action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
 
 model = DDPG("MultiInputPolicy", eval_env, action_noise=action_noise, verbose=1)
 
