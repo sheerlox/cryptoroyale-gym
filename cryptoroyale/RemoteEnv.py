@@ -6,14 +6,18 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+
+import sys
 import time
 import socket
 import pickle
+
 from utils import show_mouse, clean_players, clean_loots, build_observation
+
 '''
 TCP_IP = '127.0.0.1'
 TCP_PORT = 5005
-BUFFER_SIZE = 20  # Normally 1024, but we want fast response
+BUFFER_SIZE = 2048
 '''
 class RemoteEnv:
     '''
@@ -56,9 +60,10 @@ class RemoteEnv:
             if hasattr(self, 'driver'):
                 print('dropping session')
                 self.driver.close()
-            self.init_driver()
+            # Try to avoid "Maximum number of connections exceeded" error
             time.sleep(15)
 
+            self.init_driver()
             self.driver.get("https://cryptoroyale.one/training/")
 
         if self.first_reset:
@@ -109,6 +114,8 @@ class RemoteEnv:
                         'time': game_state['cycle']['timer'],
                         'health': our_player['HP'],
                         'place': our_player['place'],
+                        'pos_x': our_player['pos_x'],
+                        'pos_y': our_player['pos_y'],
                     }
 
                     # persist game time because it isn't available once we get to post-game
@@ -125,9 +132,15 @@ class RemoteEnv:
                         data=pickle.dumps([False, observation, infos])
 
                 except Exception as e:
-                    data=pickle.dumps([True, None, None])
+                    print('\033[91m')
                     print('An error occured while calculating state:')
-                    print(e.with_traceback())
+                    print('----------- Current game_state for debugging -----------')
+                    print(game_state)
+                    print('--------------------------------------------------------')
+                    tb = sys.exc_info()[2]
+                    print(e.with_traceback(tb))
+                    print('\033[0m')
+                    exit(1)
 
                 finally:
                     self.conn.send(data)
@@ -145,12 +158,18 @@ class RemoteEnv:
 
             elif data.decode('utf-8') == "soft_reset":
                 self.env_reset()
-                while self.driver.execute_script("return game_state")['cycle']['stage'] == 'pre-game':
+                # Wait until game starts and players can move
+                cycle = self.driver.execute_script("return game_state")['cycle']
+                while cycle['stage'] == 'pre-game' or (cycle['stage'] == 'active-game' and float(cycle['timer']) < 2):
                     time.sleep(0.1)
+                    cycle = self.driver.execute_script("return game_state")['cycle']
                 self.conn.send("ok".encode('utf-8'))
 
             elif data.decode('utf-8') == "hard_reset":
                 self.env_reset(True)
-                while self.driver.execute_script("return game_state")['cycle']['stage'] == 'pre-game':
+                # Wait until game starts and players can move
+                cycle = self.driver.execute_script("return game_state")['cycle']
+                while cycle['stage'] == 'pre-game' or (cycle['stage'] == 'active-game' and float(cycle['timer']) < 2):
                     time.sleep(0.1)
+                    cycle = self.driver.execute_script("return game_state")['cycle']
                 self.conn.send("ok".encode('utf-8'))

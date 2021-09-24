@@ -80,6 +80,8 @@ class CryptoroyaleEnv(gym.Env):
             ),
         })
         self.last_health = 100
+        self.last_pos_x = 0
+        self.last_pos_y = 0
         self.total_reward = 0
 
 
@@ -105,9 +107,18 @@ class CryptoroyaleEnv(gym.Env):
             'zone': np.array(observation[3]),
         }
 
+        is_standing_still = abs(infos['pos_x'] - self.last_pos_x) < 1 and abs(infos['pos_y'] - self.last_pos_y) < 1
+
         if infos:
             if not done:
                 reward = infos['health'] - self.last_health
+
+                # punish standing still
+                if is_standing_still:
+                    reward = reward - 5
+
+                self.last_pos_x = infos['pos_x']
+                self.last_pos_y = infos['pos_y']
                 self.last_health = infos['health']
             else:
                 reward = infos['time'] / infos['place']
@@ -117,10 +128,11 @@ class CryptoroyaleEnv(gym.Env):
         self.total_reward = self.total_reward + reward
 
         print("*******************************************")
-        print("****State of current episode: ", done)
+        print("****State of current episode: ", 'Done' if done else 'In Progress')
         if infos:
             print("****New Health: ", infos['health'])
         print("****Last Health: ", self.last_health)
+        print("****Is standing still: ", is_standing_still)
         print("****Collected Reward: ", reward)
         print('****Total Reward: ', self.total_reward)
         time.sleep(0.1)
@@ -137,9 +149,11 @@ class CryptoroyaleEnv(gym.Env):
 
         if self.tcpconnection.recv(2048).decode('utf-8') == "ok":
             self.last_health = 100
+            self.last_pos_x = 0
+            self.last_pos_y = 0
             self.total_reward = 0
             self.tcpconnection.send("state".encode('utf-8'))
-            done, observation, _ = pickle.loads(self.tcpconnection.recv(4096))
+            _done, observation, _infos = pickle.loads(self.tcpconnection.recv(4096))
 
             clean_observation = {
                 'player': np.array(observation[0]),
@@ -147,8 +161,6 @@ class CryptoroyaleEnv(gym.Env):
                 'loots': reshape_inputs_with_zeros(np.array(observation[2]), self.observation_space['loots'].shape),
                 'zone': np.array(observation[3]),
             }
-
-            print("****State of current episode: ", done)
 
             return clean_observation
 
